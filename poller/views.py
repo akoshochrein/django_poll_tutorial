@@ -1,7 +1,9 @@
 
-from django.http import HttpResponse, Http404
+from django.core.urlresolvers import reverse
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render_to_response, get_object_or_404
-from poller.models import Poll
+from django.template import RequestContext
+from poller.models import Choice, Poll
 
 def index(request):
 	latest_poll_list = Poll.objects.all().order_by('-pub_date')[:5]
@@ -9,10 +11,22 @@ def index(request):
 
 def detail(request, poll_id):
 	p = get_object_or_404(Poll, pk=poll_id)
-	return render_to_response('poller/detail.html', {'poll': p})
+	return render_to_response('poller/detail.html', {'poll': p},
+								context_instance=RequestContext(request))
 
 def results(request, poll_id):
-	return HttpResponse('You are looking at the results of poll %s.' % poll_id)
+	p = get_object_or_404(Poll, pk=poll_id)
+	return render_to_response('poller/results.html', {'poll': p})
 
 def vote(request, poll_id):
-	return HttpResponse('You are voting on poll %s.' % poll_id)
+	p = get_object_or_404(Poll, pk=poll_id)
+	try:
+		selected_choice = p.choice_set.get(pk=request.POST['choice'])
+	except (KeyError, Choice.DoesNotExist):
+		return render_to_response('poller/detail.html', {
+				'poll': p,
+				'error_message': 'You didn\'t select a choice.',
+			}, context_instance=RequestContext(request))
+	selected_choice.votes += 1
+	selected_choice.save()
+	return HttpResponseRedirect(reverse('poller.views.results', args=(p.id,)))
